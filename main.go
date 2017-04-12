@@ -24,6 +24,7 @@ var (
 	HeaderData         io.Writer
 	RecordData         io.Writer
 	IndexData          io.Writer
+	RecordMap          map[string]int64
 )
 
 const (
@@ -73,11 +74,11 @@ func main() {
 	1300007|2|陕西|西安|710000|029
 	1300008|2|湖北|武汉|430000|027
 	1300009|2|陕西|西安|710000|029`)*/
-
+	//创建Map，用于去重
+	RecordMap = make(map[string]int64)
 	a_txt := strings.Replace(string(txtFile), "\r\n", "\n", -1)
 	//a_txt = strings.Trim(a_txt, "\n") //去除末尾
 	arr_txt := strings.Split(a_txt, "\n")
-	first_index_offset = FILE_HEAD_LENGTH + RecordTotal(arr_txt) //索引区第一个偏移量
 
 	outputFile, err = os.OpenFile("phone.dat", os.O_CREATE, 0600)
 	defer outputFile.Close()
@@ -85,21 +86,25 @@ func main() {
 	//申明写入的数据
 	HeaderData = model.M_Writer.NewWriter(outputFile, 0)                 //头部，<版本号,4字节>|<第一个索引区偏移量，4字节>
 	RecordData = model.M_Writer.NewWriter(outputFile, FILE_HEAD_LENGTH)  //记录区,第8个字节开始写入,<省份>|<城市>|<邮编>|<长途区号>\000
+	first_index_offset = FILE_HEAD_LENGTH + RecordTotal(arr_txt)         //写入记录区数据，并返回索引区第一个偏移量
 	IndexData = model.M_Writer.NewWriter(outputFile, first_index_offset) //索引区，记录区之后开始写入,<手机号前7位,4字节><记录区对应数据偏移量，4字节><卡类型，1字节>
 	//开始写入数据
 	HeaderData.Write([]byte("1704")) //2017年04月
 	HeaderData.Write(Bget4(int32(first_index_offset)))
 
-	var recordOffset int64 = FILE_HEAD_LENGTH
 	for _, value := range arr_txt { //fmt.Printf("arr[%d]=%d \n", index, value)
 		if len(value) == 0 { //空行
 			continue
 		}
 		recordByte := []byte(value) //1300000|2|山东|济南|250000|0531
-		length := HandleEachRecord(recordByte)
-		//fmt.Println(length, err, RecordData)
+		data := bytes.Split(recordByte, []byte("|"))
+		record_string := string(data[2]) + "|" + string(data[3]) + "|" + string(data[4]) + "|" + string(data[5]) + "\000"
+
+		recordOffset, ok := RecordMap[record_string]
+		if !ok { //不存在
+			fmt.Println("记录区数据出错，请检查数据...")
+		}
 		HandlerEachIndex(recordOffset, recordByte)
-		recordOffset += int64(length) //下一个记录区偏移量
 
 	}
 
@@ -110,9 +115,9 @@ func main() {
 
 //记录区数据 <省份>|<城市>|<邮编>|<长途区号>\000
 func HandleEachRecord(b []byte) int64 {
-	data := bytes.Split(b, []byte("|"))
-	record_string := string(data[2]) + "|" + string(data[3]) + "|" + string(data[4]) + "|" + string(data[5]) + "\000"
-	length, _ := RecordData.Write([]byte(record_string))
+	//data := bytes.Split(b, []byte("|"))
+	//record_string := string(data[2]) + "|" + string(data[3]) + "|" + string(data[4]) + "|" + string(data[5]) + "\000"
+	length, _ := RecordData.Write(b)
 	return int64(length)
 }
 
@@ -144,9 +149,10 @@ func HandlerEachIndex(offset int64, b []byte) {
 	//fmt.Println(length1, err1)
 }
 
-//计算记录区总长度
+//记录区去重及计算偏移量和记录区总长度
 func RecordTotal(arr []string) int64 {
 	var total int64 = 0
+	var rOffset int64 = FILE_HEAD_LENGTH //第一个数据偏移量
 	for _, value := range arr {
 		if len(value) == 0 { //空行
 			continue
@@ -154,7 +160,15 @@ func RecordTotal(arr []string) int64 {
 		recordByte := []byte(value)
 		data := bytes.Split(recordByte, []byte("|"))
 		record_string := string(data[2]) + "|" + string(data[3]) + "|" + string(data[4]) + "|" + string(data[5]) + "\000"
-		total += int64(len([]byte(record_string)))
+
+		_, ok := RecordMap[record_string]
+		if !ok { //不存在
+			RecordMap[record_string] = rOffset                //偏移量,存入map方便后面查询
+			length := HandleEachRecord([]byte(record_string)) //写入文件中..
+			rOffset += length                                 //下一个记录区偏移量
+			total += length                                   //计算总长度，这个单位其实可以去掉
+		}
+
 	}
 
 	return total
