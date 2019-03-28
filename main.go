@@ -80,7 +80,7 @@ func main() {
 	//a_txt = strings.Trim(a_txt, "\n") //去除末尾
 	arr_txt := strings.Split(a_txt, "\n")
 
-	outputFile, err = os.OpenFile("phone.dat", os.O_CREATE, 0600)
+	outputFile, err = os.OpenFile("phone.dat", os.O_CREATE|os.O_WRONLY, 0600)
 	defer outputFile.Close()
 
 	//申明写入的数据
@@ -89,7 +89,10 @@ func main() {
 	first_index_offset = FILE_HEAD_LENGTH + RecordTotal(arr_txt)         //写入记录区数据，并返回索引区第一个偏移量
 	IndexData = model.M_Writer.NewWriter(outputFile, first_index_offset) //索引区，记录区之后开始写入,<手机号前7位,4字节><记录区对应数据偏移量，4字节><卡类型，1字节>
 	//开始写入数据
-	HeaderData.Write([]byte("1812")) //2018年12月
+	if _, err = HeaderData.Write([]byte("1903")); err != nil {
+        fmt.Println(err) //O_WRONLY
+	}
+	
 	HeaderData.Write(Bget4(int32(first_index_offset)))
 
 	for _, value := range arr_txt { //fmt.Printf("arr[%d]=%d \n", index, value)

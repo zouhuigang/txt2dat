@@ -5,7 +5,6 @@
 
 	本库只保留一份最新的output.txt和phone.dat，历史版本数据会被移除。
 
-
 ### 基本格式说明
 
 output.txt 格式说明:
@@ -29,6 +28,26 @@ output.txt 格式说明:
 
 ### 将获取到的文件导入到sql中,然后格式化获取Phone.txt
 
+1.创建表
+
+	CREATE TABLE `phone` (
+	  `pref` varchar(45) DEFAULT NULL,
+	  `phone` varchar(45) DEFAULT NULL,
+	  `province` varchar(45) DEFAULT NULL,
+	  `city` varchar(45) DEFAULT NULL,
+	  `isp` varchar(45) DEFAULT NULL,
+	  `post_code` varchar(45) DEFAULT NULL,
+	  `city_code` varchar(45) DEFAULT NULL,
+	  `area_code` varchar(45) DEFAULT NULL
+	) ENGINE=InnoDB  DEFAULT CHARSET=utf8 AUTO_INCREMENT=1;
+
+
+2.将phone-qqzeng-201904-423970.xlsx转换成phone-qqzeng-201904-423970.csv,再用记事本打开另存为utf-8。
+
+3.使用navicate中的"导入向导"导入刚刚创建的表中。
+
+
+
 ### 目标output.txt ,格式如下:手机号|卡类型|省份|城市|邮编|区号
 	
 	1300000|2|山东|济南|250000|0531
@@ -45,28 +64,31 @@ output.txt 格式说明:
 
 输出:
 
-	415967
+	423970
 
 
 ### 修改isp为符合的数据
 
-	UPDATE phone set isp="1" where isp="移动" =>202553
-	UPDATE phone set isp="2" where isp="联通" =>109605
-	UPDATE phone set isp="3" where isp="电信" =>81998
+	UPDATE phone set isp="1" where isp="移动" =>202941
+	UPDATE phone set isp="2" where isp="联通" =>118616
+	UPDATE phone set isp="3" where isp="电信" =>87719
 
-	UPDATE phone set isp="4" where isp="物联网/电信" =>150
-	UPDATE phone set isp="6" where isp="虚拟/移动" =>5217
-	UPDATE phone set isp="4" where isp="虚拟/电信" =>2874
-	UPDATE phone set isp="5" where isp="虚拟/联通"=>12970
-	UPDATE phone set isp="4" where isp="卫星/电信" =>600
+	UPDATE phone set isp="4" where isp="物联网/电信" =>0
+	UPDATE phone set isp="6" where isp="虚拟/移动" =>0
+	UPDATE phone set isp="4" where isp="虚拟/电信" =>0
+	UPDATE phone set isp="5" where isp="虚拟/联通"=>0
+	UPDATE phone set isp="4" where isp="卫星/电信" =>0
+	UPDATE phone set isp="4" where isp="虚拟" => 9937
+	UPDATE phone set isp="4" where isp="NULL" => 4757
 	
 
 ### 查询是否还有含有中文的isp没有被替换
 
 	SELECT isp FROM phone WHERE length(isp)!=char_length(isp)  LIMIT 10;
+	SELECT * FROM phone WHERE isp <=0 LIMIT 10;
 	
 	
-直到查询为NULL,结束。
+直到查询为NULL,再核对一下数量跟总数一致即可结束。
 
 
 output.txt格式数据:
@@ -88,7 +110,7 @@ output.txt格式数据:
 	1300009	2	陕西	西安	710000	029
 
 
-### 然后将查询结果导出为output.csv
+### 然后去掉limit 10限制，将所有数据查询出来，查询结果导出为output.csv
 
 
 output.csv用记事本打开，替换掉其中的字符
@@ -102,23 +124,25 @@ output.csv用记事本打开，替换掉其中的字符
 
 
 
-### 运行程序，生成phone.dat文件
+### 运行程序，生成phone.dat文件，删除老版本的phone.dat和output.txt。
 
 
 修改main.go中的版本号：
 
 	
 	//开始写入数据
-	HeaderData.Write([]byte("1712")) //2017年12月
+	HeaderData.Write([]byte("1812")) //2018年12月
 
 =>
 
 	//开始写入数据
-	HeaderData.Write([]byte("1812")) //2018年12月
+	HeaderData.Write([]byte("1903")) //2019年03月
 
 
 
 linux编译，生成main
+
+	go build main.go
 
 	./main
 
@@ -182,3 +206,42 @@ phone.dat生成流程:
 
 	txt->程序->dat
 
+
+### 问题汇总
+
+Q:
+
+	[ERR] 2006 - MySQL server has gone away
+
+
+A:
+
+	
+	可能是sql语句过长，超过mysql通信缓存区最大长度。
+
+	编辑 MySQL 安装目录下的 my.ini，在最后添加以下内容：
+
+	max_allowed_packet = 50M
+
+	重启 MySQL 服务
+
+	直接导入mysql脚本，问题很多，所以还是采用cvs格式导入数据
+
+
+Q:
+	运行程序之后，发现生成了一个空的phone.dat，报错信息:
+	write phone.dat: bad file descriptor
+
+A:
+
+	You need to add the O_WRONLY flag 
+
+将
+
+		outputFile, err = os.OpenFile("phone.dat", os.O_CREATE, 0600)
+
+变成:
+
+		outputFile, err = os.OpenFile("phone.dat", os.O_CREATE|os.O_WRONLY, 0600)
+
+[https://stackoverflow.com/questions/33851692/golang-bad-file-descriptor](https://stackoverflow.com/questions/33851692/golang-bad-file-descriptor)
